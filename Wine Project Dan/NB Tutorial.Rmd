@@ -1,0 +1,122 @@
+---
+title: "NB Tutorial"
+author: "Dan Burke"
+date: "11/29/2021"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Load the required packages and enable parallel processing
+
+```{r Load Packages, echo=FALSE}
+library(corrplot)  # graphical display of the correlation matrix
+library(caret)     # classification and regression training
+library(klaR)      # naive bayes
+library(nnet)      # neural networks (nnet and avNNet)
+library(kernlab)   # support vector machines (svmLinear and svmRadial)
+library(randomForest)  # random forest, also for recursive feature elimination
+library(gridExtra) # save dataframes as images
+library(doSNOW)    # parallel processing
+registerDoSNOW(makeCluster(3, type = 'SOCK')) 
+```
+
+### Load the data
+
+```{r Get the datasets from UCI machine learning, echo=FALSE}
+# Note: use http, it does not work with https in knitr (it does work from the R console)
+red <- read.csv('http://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv', header = TRUE, sep = ';')
+white <- read.csv('http://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-white.csv', header = TRUE, sep = ';')
+```
+
+```{r merge the 2 datasets, echo=FALSE}
+red[, 'color'] <- 'red'
+white[, 'color'] <- 'white'
+df <- rbind(red, white)
+df$color <- as.factor(df$color)
+```
+
+
+```{r change to binary classification, echo=FALSE}
+good_ones <- df$quality >= 6
+bad_ones <- df$quality < 6
+df[good_ones, 'quality'] <- 'good'
+df[bad_ones, 'quality'] <- 'bad'  
+df$quality <- as.factor(df$quality)
+```
+
+```{r dummy variables, echo=FALSE}
+dummies <- dummyVars(quality ~ ., data = df)
+df_dummied <- data.frame(predict(dummies, newdata = df))
+df_dummied[, 'quality'] <- df$quality
+```
+
+### Data splitting
+```{r split the data, echo=FALSE}
+# set the seed for reproducibility
+set.seed(1234) 
+trainIndices <- createDataPartition(df_dummied$quality, p = 0.7, list = FALSE)
+train <- df_dummied[trainIndices, ]
+test <- df_dummied[-trainIndices, ]
+```
+
+### Feature selection
+```{r correlation matrix, echo=FALSE}
+numericColumns <- !colnames(train) %in% c('quality', 'color.red', 'color.white')
+correlationMatrix <- cor(train[, numericColumns])
+highlyCorrelated <- findCorrelation(correlationMatrix, cutoff = 0.6)
+colnames(correlationMatrix)[highlyCorrelated]
+
+
+corrplot(correlationMatrix, method = 'number', tl.cex = 0.5)
+
+```
+
+### Exploratory Data Analysis
+
+
+
+```{r exploratory data analysis, echo=FALSE}
+# Normalize the quantitative variables to be within the [0,1] range
+train_normalized <- preProcess(train[, numericColumns], method = 'range')
+train_plot <- predict(train_normalized, train[, numericColumns])
+featurePlot(train_plot, train$quality, 'box')
+
+```
+
+
+
+```{r cross validation}
+
+fitControl <- trainControl(method = 'cv', number = 5)
+```
+
+```{r random forest}
+fitControl_rfe <- rfeControl(functions = rfFuncs, method = 'cv', number = 5) # 5-fold CV
+fit_rfe <- rfe(quality ~., data = train,
+               sizes = c(1:10),  # subset sizes to test (ahem... not sure how it works)
+               rfeControl = fitControl_rfe)
+features <- predictors(fit_rfe)
+
+```
+
+### Naive Bayes classifier
+
+```{r Naive Bayes}
+# Here the Naive Bayes classifier works best without range
+fit_nb <- train(x = train[, features], y = train$quality,
+                method ='nb',
+                trControl = fitControl)
+predict_nb <- predict(fit_nb, newdata = test[, features])
+confMat_nb <- confusionMatrix(predict_nb, test$quality, positive = 'good')
+confMat_nb
+importance_nb <- varImp(fit_nb, scale = TRUE)
+importance_nb
+
+plot(importance_nb, main = 'Feature importance for Naive Bayes')
+
+```
