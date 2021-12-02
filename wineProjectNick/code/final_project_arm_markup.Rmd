@@ -1,0 +1,199 @@
+---
+title: "Final_ARM"
+author: "Alfred Nick Tinsley"
+date: "11/29/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Code for final Project
+
+
+
+### Setting working directory for my data sets
+```{r wd}
+
+setwd("C:/Users/nicktinsley/OneDrive/Syracuse/R code/IST 707/data/finalProject")
+
+```
+
+
+
+### Loading Libraries for our discovery
+```{r libraries}
+library(arules)
+library(arulesViz)
+library(plyr)
+library(dplyr)
+library(funModeling)
+
+```
+
+
+### Load data sets 
+
+
+```{r red_wht}
+
+red <- read.csv2("red.csv")
+white <- read.csv2("white.csv")
+
+```
+
+
+### Viewing Data
+
+```{r }
+
+View(red[red$quality > 5,])
+
+hist(red$quality)
+hist(white$quality)
+
+```
+
+### Discretize Categories
+##quality 5 - 7 mid
+##quality < 5 low
+##quality > 7 high
+
+
+### Munge data set
+1. Convert char to factor
+
+
+```{r}
+red <- red %>% mutate_if(is.character, funs(as.factor))
+str(red)
+
+white <- white %>% mutate_if(is.character, funs(as.factor))
+str(white)
+
+
+```
+
+
+2. Discretize the quality attribute
+
+```{r}
+red$quality_disc <- cut(red$quality, breaks = c(0,4,6,Inf),
+                        labels=c("low","mid","high"))
+
+table(red$quality, red$quality_disc)
+
+white$quality_disc <- cut(white$quality, breaks = c(0,4,6,Inf),
+                        labels=c("low","mid","high"))
+
+table(white$quality, white$quality_disc)
+
+
+
+
+
+```
+
+3 . Remove quality attribute so it does not create unecesarry rules
+
+```{r}
+red <- red %>% select(-quality)
+white <- white %>% select(-quality)
+
+```
+
+
+4. Create one data set for all wines to see if rules for each compare with combined DS
+
+```{r}
+red_white <- rbind(red,white)
+
+```
+
+### Create some rules for discovery
+
+* Red Wine Rules
+```{r red_wine}
+rules_highQ <- apriori(data=red, parameter = list(supp=0.001, conf=0.08,minlen=2),
+                       appearance = list(default="rhs",lhs="quality_disc=high"),
+                       control=list(verbose=T))
+rules_highQ <- sort(rules_highQ, decreasing = T, by = "lift")
+inspect(rules_highQ)
+
+#mid 
+rules_midQ <- apriori(data=red, parameter = list(supp=0.001, conf=0.08,minlen=2),
+                       appearance = list(default="rhs",lhs="quality_disc=mid"),
+                       control=list(verbose=T))
+rules_midQ <- sort(rules_midQ, decreasing = T, by = "lift")
+inspect(rules_midQ)
+
+#low
+rules_lowQ <- apriori(data=red, parameter = list(supp=0.001, conf=0.08,minlen=2),
+                      appearance = list(default="rhs",lhs="quality_disc=low"),
+                      control=list(verbose=T))
+rules_lowQ <- sort(rules_lowQ, decreasing = T, by = "lift")
+inspect(rules_lowQ)
+
+
+
+```
+
+
+
+
+* White Wine Rules
+
+```{r white_wine}
+rules_wht <- apriori(white, parameter=list(supp=0.001, conf=0.9, maxlen=4))
+rules_wht <- sort(rules_wht, decreasing = TRUE, by ="confidence")
+inspect(rules_wht[1:50])
+
+
+
+```
+
+
+
+
+* Combined Red White Rules
+
+```{r red_wht_wine}
+rules_redwht <- apriori(red_white, parameter=list(supp=0.001, conf=0.9, maxlen=4))
+rules_redwht <- sort(rules_redwht, decreasing = T, by="confidence")
+inspect(rules_redwht[1:50])
+
+
+rules_rdwht_mid <- apriori(data=red_white, parameter = list(supp=0.001, conf=0.9,maxlen=4),
+                           appearance = list(default="lhs",rhs="quality_disc=mid"),
+                           control=list(verbose=T))
+rules_rdwht_mid <- sort(rules_rdwht_mid, decreasing = T, by="lift")
+inspect(rules_rdwht_mid[1:10])
+
+rules_rdwht_high <- apriori(data=red_white, parameter = list(supp=0.001, conf=0.9,maxlen=4),
+                            appearance = list(default="lhs",rhs="quality_disc=high"),
+                            control=list(verbose=T))
+rules_rdwht_high <- sort(rules_rdwht_high, decreasing = T, by="lift")
+inspect(rules_rdwht_high[1:10])
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
